@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#f5f7f3" />
+  <meta name="description" content="HomeOps helps people manage home repairs from request to provider selection, scheduling and final bill review." />
+  <title>HomeOps — Home repairs, handled</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/" aria-label="HomeOps home">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        <span class="brand-copy">
+          <strong>HomeOps</strong>
+          <small>Home repairs, handled.</small>
+        </span>
+      </a>
+      <div class="header-actions">
+        <button id="judge-toggle" class="text-button" type="button" aria-expanded="false" aria-controls="judge-view">
+          View demo details
+        </button>
+        <button id="reset-btn" class="secondary-button" type="button">Start over</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="shell page-shell">
+    <section id="landing-view" class="landing-view" aria-labelledby="landing-title">
+      <div class="landing-copy">
+        <span class="eyebrow">YOUR HOME SERVICE ASSISTANT</span>
+        <h1 id="landing-title">What needs fixing?</h1>
+        <p class="lead">Tell HomeOps what happened. We’ll find suitable help, compare options and keep you in control of the cost.</p>
+      </div>
+
+      <form id="start-form" class="start-form" novalidate>
+        <label class="sr-only" for="start-message">Describe what needs fixing</label>
+        <div class="start-input-row">
+          <input id="start-message" autocomplete="off" placeholder="e.g. My AC isn't cooling" aria-describedby="start-helper" />
+          <button class="primary-button large" type="submit">Get help</button>
+        </div>
+        <p id="start-helper" class="helper-text">Describe the problem in your own words. You don’t need to know what type of technician you need.</p>
+      </form>
+
+      <div class="example-area" aria-label="Common examples">
+        <span>Try an example</span>
+        <div class="example-chips">
+          <button class="example-chip" type="button" data-message="My AC isn't cooling. Handle it.">AC not cooling</button>
+          <button class="example-chip" type="button" data-message="My kitchen pipe is leaking. Keep it under $90.">Water leak</button>
+          <button class="example-chip" type="button" data-message="There is smoke coming from my air conditioner.">Smoke from AC</button>
+        </div>
+      </div>
+
+      <div class="trust-grid" aria-label="How HomeOps helps">
+        <article>
+          <span class="trust-number">01</span>
+          <div><strong>Explain the problem</strong><p>Use everyday language. HomeOps works out the service need.</p></div>
+        </article>
+        <article>
+          <span class="trust-number">02</span>
+          <div><strong>Review one recommendation</strong><p>See the best option first, with price and availability clearly explained.</p></div>
+        </article>
+        <article>
+          <span class="trust-number">03</span>
+          <div><strong>Stay in control of cost</strong><p>Unexpected charges are flagged before they can be approved.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="case-view" class="case-view" hidden aria-labelledby="case-title">
+      <div class="case-header">
+        <div>
+          <span class="eyebrow">YOUR REPAIR</span>
+          <h1 id="case-title">Home service request</h1>
+          <p id="case-subtitle" class="case-subtitle">HomeOps is working on your request.</p>
+        </div>
+        <span id="user-status" class="user-status">In progress</span>
+      </div>
+
+      <ol id="progress" class="progress" aria-label="Repair progress">
+        <li data-stage="0" class="active"><span>1</span><div><strong>Request</strong><small>Problem understood</small></div></li>
+        <li data-stage="1"><span>2</span><div><strong>Provider</strong><small>Choose who helps</small></div></li>
+        <li data-stage="2"><span>3</span><div><strong>Repair</strong><small>Service visit</small></div></li>
+        <li data-stage="3"><span>4</span><div><strong>Bill</strong><small>Cost check</small></div></li>
+      </ol>
+
+      <div class="workspace-grid">
+        <section id="decision-card" class="decision-card" aria-live="polite" aria-busy="false">
+          <div id="decision-loading" class="loading-state" hidden>
+            <div class="spinner" aria-hidden="true"></div>
+            <div><strong>HomeOps is working on it…</strong><p id="loading-copy">Understanding your request and checking suitable options.</p></div>
+          </div>
+
+          <div id="decision-content">
+            <span id="decision-eyebrow" class="eyebrow">NEXT STEP</span>
+            <h2 id="decision-title">We’re preparing your options</h2>
+            <p id="decision-body" class="decision-body">HomeOps will show you the most important decision here.</p>
+            <div id="decision-detail" class="decision-detail"></div>
+            <div id="decision-actions" class="decision-actions"></div>
+          </div>
+        </section>
+
+        <aside class="summary-card" aria-labelledby="summary-title">
+          <div class="summary-head">
+            <span class="eyebrow">AT A GLANCE</span>
+            <h2 id="summary-title">Repair summary</h2>
+          </div>
+          <dl class="summary-list">
+            <div><dt>Service</dt><dd id="summary-service">—</dd></div>
+            <div><dt>Provider</dt><dd id="summary-provider">Not selected yet</dd></div>
+            <div><dt>Visit</dt><dd id="summary-appointment">Not scheduled yet</dd></div>
+            <div><dt>Agreed price</dt><dd id="summary-approved">—</dd></div>
+            <div id="summary-bill-row" hidden><dt>Final bill</dt><dd id="summary-bill">—</dd></div>
+          </dl>
+        </aside>
+      </div>
+
+      <section id="comparison-section" class="comparison-section" hidden aria-labelledby="comparison-title">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">OTHER OPTIONS</span>
+            <h2 id="comparison-title">Compare all providers</h2>
+          </div>
+          <button id="comparison-close" class="text-button" type="button">Hide comparison</button>
+        </div>
+        <div id="provider-list" class="provider-list"></div>
+      </section>
+
+      <section class="assistant-section" aria-labelledby="assistant-title">
+        <div class="section-heading compact-heading">
+          <div>
+            <span class="eyebrow">HOMEOPS ASSISTANT</span>
+            <h2 id="assistant-title">Ask about this repair</h2>
+          </div>
+          <button id="conversation-toggle" class="text-button" type="button" aria-expanded="false" aria-controls="conversation-log">See conversation</button>
+        </div>
+
+        <div id="latest-update" class="latest-update" aria-live="polite">
+          <span class="assistant-icon" aria-hidden="true">H</span>
+          <p>HomeOps updates will appear here.</p>
+        </div>
+
+        <div id="conversation-log" class="conversation-log" hidden></div>
+        <div id="suggestions" class="suggestions" aria-label="Suggested actions"></div>
+
+        <form id="chat-form" class="chat-form">
+          <label class="sr-only" for="message">Ask HomeOps about this repair</label>
+          <input id="message" autocomplete="off" placeholder="Ask a question or give an instruction" />
+          <button class="primary-button" type="submit">Send</button>
+        </form>
+      </section>
+    </section>
+
+    <section id="judge-view" class="judge-view" hidden aria-labelledby="judge-title">
+      <div class="judge-header">
+        <div>
+          <span class="eyebrow">DEMO / JUDGE VIEW</span>
+          <h2 id="judge-title">Technical evidence</h2>
+          <p>Hackathon proof is separated from the normal customer experience.</p>
+        </div>
+        <button id="judge-close" class="secondary-button" type="button">Close demo details</button>
+      </div>
+
+      <div class="judge-scenarios" aria-label="Demo scenarios">
+        <button type="button" data-scenario="My AC isn't cooling. Handle it."><strong>AC golden flow</strong><span>Source → schedule → bill control</span></button>
+        <button type="button" data-scenario="My kitchen pipe is leaking. Keep it under $90."><strong>Budget-aware plumbing</strong><span>Respect a customer budget</span></button>
+        <button type="button" data-scenario="There is smoke coming from my air conditioner."><strong>Safety stop</strong><span>Block normal sourcing on emergency language</span></button>
+      </div>
+
+      <div class="judge-grid">
+        <article class="judge-card">
+          <span class="eyebrow">RUNTIME</span>
+          <dl class="judge-list">
+            <div><dt>Build</dt><dd id="build-version">v0.4</dd></div>
+            <div><dt>MCP</dt><dd id="mcp-status">Checking…</dd></div>
+            <div><dt>Tool surface</dt><dd id="tool-count">Checking…</dd></div>
+            <div><dt>Bedrock</dt><dd id="aws-status">Optional</dd></div>
+          </dl>
+          <button id="bedrock-test" class="secondary-button full" type="button">Test Bedrock</button>
+        </article>
+
+        <article class="judge-card">
+          <span class="eyebrow">POLICY EVIDENCE</span>
+          <dl class="judge-list">
+            <div><dt>Decision</dt><dd id="judge-decision">Waiting</dd></div>
+            <div><dt>Exception</dt><dd id="judge-exception">—</dd></div>
+            <div><dt>Recommended action</dt><dd id="judge-action">—</dd></div>
+            <div><dt>Explanation source</dt><dd id="judge-ai">Deterministic fallback</dd></div>
+          </dl>
+        </article>
+
+        <article class="judge-card judge-card-wide">
+          <div class="judge-card-head">
+            <div><span class="eyebrow">AUDIT TRAIL</span><h3>Recent workflow events</h3></div>
+            <span id="job-id" class="code-label">No active job</span>
+          </div>
+          <div id="audit-list" class="audit-list"><p class="muted">Run a scenario to generate evidence.</p></div>
+        </article>
+      </div>
+
+      <div class="architecture-card">
+        <span>Alexa+ / Web simulation</span><b>→</b><span>Streamable HTTP MCP</span><b>→</b><span>HomeOps engine</span><b>→</b><span>SQLite / Postgres</span><b>→</b><span>Bedrock optional</span>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

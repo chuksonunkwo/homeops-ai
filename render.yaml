@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: homeops-ai
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: HOMEOPS_HOST
+        value: 0.0.0.0
+      - key: MCP_ALLOWED_HOSTS
+        sync: false
+      - key: MCP_ALLOWED_ORIGINS
+        sync: false
+      - key: BEDROCK_ENABLED
+        value: "false"

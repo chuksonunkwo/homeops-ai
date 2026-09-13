@@ -1,0 +1,1 @@
+"""HomeOps AI application package."""
