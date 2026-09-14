@@ -137,7 +137,7 @@ async def health(_: Request):
         {
             "status": "ok",
             "app": "HomeOps AI",
-            "version": "0.4.1",
+            "version": "0.4.2",
             "storage_backend": store.backend,
             "mcp_available": MCP_AVAILABLE,
             "mcp_endpoint": "/mcp" if MCP_AVAILABLE else None,
@@ -246,7 +246,7 @@ routes = [
     Route("/api/chat", chat, methods=["POST"]),
     Route("/api/jobs/{job_id}", get_job, methods=["GET"]),
     Route("/api/tools", list_tools, methods=["GET"]),
-    Mount("/static", app=StaticFiles(directory=STATIC_DIR), name="static"),
+    Mount("/static", app=StaticFiles(directory=STATIC_DIR, check_dir=False), name="static"),
 ]
 
 if MCP_AVAILABLE and mcp_app is not None:

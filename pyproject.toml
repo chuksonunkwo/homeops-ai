@@ -1,6 +1,6 @@
 [project]
 name = "homeops-ai"
-version = "0.4.1"
+version = "0.4.2"
 description = "HomeOps AI - an MCP-first home service procurement and invoice-control agent for the Amazon Developer Hackathon."
 requires-python = "~=3.12.0"
 dependencies = [
@@ -30,3 +30,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.vercel]
+entrypoint = "asgi:app"
