@@ -27,8 +27,22 @@ else:
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = Path(os.getenv("HOMEOPS_DB_PATH", DATA_DIR / "homeops.db"))
 
+def _env_int(name: str, default: int) -> int:
+    """Read an integer env var, treating missing or blank values as default."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return int(raw.strip())
+
+
 APP_HOST = os.getenv("HOMEOPS_HOST", "127.0.0.1")
-APP_PORT = int(os.getenv("PORT", os.getenv("HOMEOPS_PORT", "8000")))
+# Vercel can expose PORT as an empty string in serverless functions.
+# Fall back to HOMEOPS_PORT, then 8000, instead of crashing at import time.
+_port_raw = os.getenv("PORT")
+if _port_raw is None or not _port_raw.strip():
+    APP_PORT = _env_int("HOMEOPS_PORT", 8000)
+else:
+    APP_PORT = int(_port_raw.strip())
 
 vercel_url = os.getenv("VERCEL_URL", "").strip()
 production_url = os.getenv("VERCEL_PROJECT_PRODUCTION_URL", "").strip()
@@ -39,8 +53,8 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 AWS_PROFILE = os.getenv("AWS_PROFILE", "")
 BEDROCK_ENABLED = os.getenv("BEDROCK_ENABLED", "false").lower() == "true"
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "")
-BEDROCK_MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "120"))
-BEDROCK_READ_TIMEOUT_SECONDS = int(os.getenv("BEDROCK_READ_TIMEOUT_SECONDS", "90"))
+BEDROCK_MAX_TOKENS = _env_int("BEDROCK_MAX_TOKENS", 120)
+BEDROCK_READ_TIMEOUT_SECONDS = _env_int("BEDROCK_READ_TIMEOUT_SECONDS", 90)
 
 vercel_hosts = [x for x in {vercel_url, production_url} if x]
 vercel_origins = [f"https://{x}" for x in vercel_hosts]
