@@ -11,13 +11,29 @@ try:
 except ImportError:
     pass
 
-DATA_DIR = Path(os.getenv("HOMEOPS_DATA_DIR", BASE_DIR / "data"))
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+IS_VERCEL = bool(os.getenv("VERCEL"))
+
+# Vercel's deployed filesystem is read-only except /tmp. A configured
+# DATABASE_URL is the durable production path; /tmp is only a safe fallback
+# for health checks or short-lived preview experiments.
+if DATABASE_URL:
+    DATA_DIR = Path(os.getenv("HOMEOPS_DATA_DIR", "/tmp/homeops" if IS_VERCEL else BASE_DIR / "data"))
+elif IS_VERCEL:
+    DATA_DIR = Path(os.getenv("HOMEOPS_DATA_DIR", "/tmp/homeops"))
+else:
+    DATA_DIR = Path(os.getenv("HOMEOPS_DATA_DIR", BASE_DIR / "data"))
+
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = Path(os.getenv("HOMEOPS_DB_PATH", DATA_DIR / "homeops.db"))
 
 APP_HOST = os.getenv("HOMEOPS_HOST", "127.0.0.1")
 APP_PORT = int(os.getenv("PORT", os.getenv("HOMEOPS_PORT", "8000")))
-PUBLIC_BASE_URL = os.getenv("HOMEOPS_PUBLIC_BASE_URL", "http://127.0.0.1:8000")
+
+vercel_url = os.getenv("VERCEL_URL", "").strip()
+production_url = os.getenv("VERCEL_PROJECT_PRODUCTION_URL", "").strip()
+default_public_url = f"https://{production_url or vercel_url}" if (production_url or vercel_url) else "http://127.0.0.1:8000"
+PUBLIC_BASE_URL = os.getenv("HOMEOPS_PUBLIC_BASE_URL", default_public_url)
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 AWS_PROFILE = os.getenv("AWS_PROFILE", "")
@@ -26,20 +42,19 @@ BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "")
 BEDROCK_MAX_TOKENS = int(os.getenv("BEDROCK_MAX_TOKENS", "120"))
 BEDROCK_READ_TIMEOUT_SECONDS = int(os.getenv("BEDROCK_READ_TIMEOUT_SECONDS", "90"))
 
-# Comma-separated values used by the MCP transport security layer when deployed.
+vercel_hosts = [x for x in {vercel_url, production_url} if x]
+vercel_origins = [f"https://{x}" for x in vercel_hosts]
+
+_default_hosts = ["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", *vercel_hosts]
+_default_origins = ["http://127.0.0.1:8000", "http://localhost:8000", *vercel_origins]
+
 MCP_ALLOWED_HOSTS = [
     x.strip()
-    for x in os.getenv(
-        "MCP_ALLOWED_HOSTS",
-        "127.0.0.1,127.0.0.1:*,localhost,localhost:*",
-    ).split(",")
+    for x in os.getenv("MCP_ALLOWED_HOSTS", ",".join(_default_hosts)).split(",")
     if x.strip()
 ]
 MCP_ALLOWED_ORIGINS = [
     x.strip()
-    for x in os.getenv(
-        "MCP_ALLOWED_ORIGINS",
-        "http://127.0.0.1:8000,http://localhost:8000",
-    ).split(",")
+    for x in os.getenv("MCP_ALLOWED_ORIGINS", ",".join(_default_origins)).split(",")
     if x.strip()
 ]

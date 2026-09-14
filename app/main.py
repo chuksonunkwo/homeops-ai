@@ -15,12 +15,12 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from .config import BASE_DIR, DB_PATH, MCP_ALLOWED_HOSTS, MCP_ALLOWED_ORIGINS
+from .config import BASE_DIR, DATABASE_URL, DB_PATH, MCP_ALLOWED_HOSTS, MCP_ALLOWED_ORIGINS
 from .conversation import HomeOpsConversation
 from .engine import HomeOpsEngine
 from .store import Store
 
-store = Store(DB_PATH)
+store = Store(DB_PATH, database_url=DATABASE_URL)
 engine = HomeOpsEngine(store)
 conversation = HomeOpsConversation(engine)
 STATIC_DIR = BASE_DIR / "static"
@@ -113,7 +113,11 @@ try:
         allowed_origins=MCP_ALLOWED_ORIGINS,
     )
     # The mounted public endpoint becomes /mcp because streamable_http_app defaults to /mcp.
-    mcp_app = mcp.streamable_http_app(transport_security=security)
+    mcp_app = mcp.streamable_http_app(
+        transport_security=security,
+        stateless_http=True,
+        json_response=True,
+    )
     MCP_AVAILABLE = True
 except Exception as exc:  # pragma: no cover - exercised only when MCP dependency is unavailable
     mcp_import_error = f"{exc.__class__.__name__}: {exc}"
@@ -133,7 +137,8 @@ async def health(_: Request):
         {
             "status": "ok",
             "app": "HomeOps AI",
-            "version": "0.4.0",
+            "version": "0.4.1",
+            "storage_backend": store.backend,
             "mcp_available": MCP_AVAILABLE,
             "mcp_endpoint": "/mcp" if MCP_AVAILABLE else None,
             "mcp_error": None if MCP_AVAILABLE else mcp_import_error or "MCP package not installed",

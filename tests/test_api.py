@@ -59,7 +59,7 @@ def test_demo_scenarios_and_mcp_tool_catalog(client):
 
 def test_health_reports_v04(client):
     data = client.get('/health').json()
-    assert data['version'] == '0.4.0'
+    assert data['version'] == '0.4.1'
 
 
 def test_api_supports_fastest_selection_and_reschedule(client):

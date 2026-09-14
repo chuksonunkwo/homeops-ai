@@ -1,15 +1,16 @@
 [project]
 name = "homeops-ai"
-version = "0.3.0"
+version = "0.4.1"
 description = "HomeOps AI - an MCP-first home service procurement and invoice-control agent for the Amazon Developer Hackathon."
-requires-python = ">=3.11"
+requires-python = "~=3.12.0"
 dependencies = [
   "mcp[cli]>=2.0,<3",
   "starlette>=0.47,<1",
   "uvicorn[standard]>=0.35,<1",
   "pydantic>=2.11,<3",
   "boto3>=1.40,<2",
-  "python-dotenv>=1.1,<2"
+  "python-dotenv>=1.1,<2",
+  "psycopg[binary]>=3.2,<4"
 ]
 
 [project.optional-dependencies]

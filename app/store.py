@@ -13,13 +13,37 @@ def utc_now() -> str:
 
 
 class Store:
-    def __init__(self, db_path: Path):
+    """HomeOps persistence with SQLite locally and PostgreSQL in hosted environments.
+
+    PostgreSQL is selected when DATABASE_URL is supplied. SQLite remains the
+    zero-config local/test backend so the existing developer workflow is unchanged.
+    """
+
+    def __init__(self, db_path: Path, database_url: str = ""):
+        self.database_url = (database_url or "").strip()
+        self.backend = "postgres" if self.database_url else "sqlite"
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.backend == "sqlite":
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.init_schema()
 
+    def _sql(self, statement: str) -> str:
+        return statement.replace("?", "%s") if self.backend == "postgres" else statement
+
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
+    def connect(self) -> Iterator[Any]:
+        if self.backend == "postgres":
+            try:
+                import psycopg
+                from psycopg.rows import dict_row
+            except ImportError as exc:  # pragma: no cover - deployment configuration error
+                raise RuntimeError(
+                    "PostgreSQL persistence requires psycopg. Install project dependencies."
+                ) from exc
+            with psycopg.connect(self.database_url, row_factory=dict_row) as con:
+                yield con
+            return
+
         con = sqlite3.connect(self.db_path)
         con.row_factory = sqlite3.Row
         try:
@@ -28,14 +52,7 @@ class Store:
         finally:
             con.close()
 
-    @staticmethod
-    def _column_names(con: sqlite3.Connection, table: str) -> set[str]:
-        rows = con.execute(f"PRAGMA table_info({table})").fetchall()
-        return {str(row[1]) for row in rows}
-
-    def _ensure_invoice_ai_columns(self, con: sqlite3.Connection) -> None:
-        """Forward-compatible local migration for existing MVP databases."""
-        columns = self._column_names(con, "invoices")
+    def _ensure_invoice_ai_columns(self, con: Any) -> None:
         additions = {
             "ai_source": "TEXT NOT NULL DEFAULT 'fallback'",
             "ai_model_id": "TEXT",
@@ -44,98 +61,174 @@ class Store:
             "ai_usage_json": "TEXT NOT NULL DEFAULT '{}'",
             "ai_error": "TEXT",
         }
+        if self.backend == "postgres":
+            for name, definition in additions.items():
+                con.execute(f"ALTER TABLE invoices ADD COLUMN IF NOT EXISTS {name} {definition}")
+            return
+
+        rows = con.execute("PRAGMA table_info(invoices)").fetchall()
+        columns = {str(row[1]) for row in rows}
         for name, definition in additions.items():
             if name not in columns:
                 con.execute(f"ALTER TABLE invoices ADD COLUMN {name} {definition}")
 
     def init_schema(self) -> None:
         with self.connect() as con:
-            con.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS jobs (
-                    id TEXT PRIMARY KEY,
-                    category TEXT NOT NULL,
-                    issue TEXT NOT NULL,
-                    location TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    max_budget REAL,
-                    selected_provider_id TEXT,
-                    selected_quote_id TEXT,
-                    approved_amount REAL,
-                    appointment_window TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
+            if self.backend == "postgres":
+                statements = [
+                    """
+                    CREATE TABLE IF NOT EXISTS jobs (
+                        id TEXT PRIMARY KEY,
+                        category TEXT NOT NULL,
+                        issue TEXT NOT NULL,
+                        location TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        max_budget DOUBLE PRECISION,
+                        selected_provider_id TEXT,
+                        selected_quote_id TEXT,
+                        approved_amount DOUBLE PRECISION,
+                        appointment_window TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """,
+                    """
+                    CREATE TABLE IF NOT EXISTS quotes (
+                        id TEXT PRIMARY KEY,
+                        job_id TEXT NOT NULL REFERENCES jobs(id),
+                        provider_id TEXT NOT NULL,
+                        provider_name TEXT NOT NULL,
+                        amount DOUBLE PRECISION NOT NULL,
+                        arrival_window TEXT NOT NULL,
+                        rating DOUBLE PRECISION NOT NULL,
+                        scope TEXT NOT NULL,
+                        score DOUBLE PRECISION,
+                        recommendation TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                    """,
+                    """
+                    CREATE TABLE IF NOT EXISTS invoices (
+                        id TEXT PRIMARY KEY,
+                        job_id TEXT NOT NULL REFERENCES jobs(id),
+                        approved_amount DOUBLE PRECISION NOT NULL,
+                        invoice_amount DOUBLE PRECISION NOT NULL,
+                        variance DOUBLE PRECISION NOT NULL,
+                        variance_percentage DOUBLE PRECISION NOT NULL,
+                        decision TEXT NOT NULL,
+                        exception TEXT,
+                        recommended_action TEXT NOT NULL,
+                        rationale TEXT NOT NULL,
+                        line_items_json TEXT NOT NULL,
+                        ai_source TEXT NOT NULL DEFAULT 'fallback',
+                        ai_model_id TEXT,
+                        ai_request_id TEXT,
+                        ai_latency_ms INTEGER,
+                        ai_usage_json TEXT NOT NULL DEFAULT '{}',
+                        ai_error TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                    """,
+                    """
+                    CREATE TABLE IF NOT EXISTS events (
+                        id BIGSERIAL PRIMARY KEY,
+                        job_id TEXT,
+                        event_type TEXT NOT NULL,
+                        details_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                    """,
+                ]
+                for statement in statements:
+                    con.execute(statement)
+            else:
+                con.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS jobs (
+                        id TEXT PRIMARY KEY,
+                        category TEXT NOT NULL,
+                        issue TEXT NOT NULL,
+                        location TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        max_budget REAL,
+                        selected_provider_id TEXT,
+                        selected_quote_id TEXT,
+                        approved_amount REAL,
+                        appointment_window TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
 
-                CREATE TABLE IF NOT EXISTS quotes (
-                    id TEXT PRIMARY KEY,
-                    job_id TEXT NOT NULL,
-                    provider_id TEXT NOT NULL,
-                    provider_name TEXT NOT NULL,
-                    amount REAL NOT NULL,
-                    arrival_window TEXT NOT NULL,
-                    rating REAL NOT NULL,
-                    scope TEXT NOT NULL,
-                    score REAL,
-                    recommendation TEXT,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY(job_id) REFERENCES jobs(id)
-                );
+                    CREATE TABLE IF NOT EXISTS quotes (
+                        id TEXT PRIMARY KEY,
+                        job_id TEXT NOT NULL,
+                        provider_id TEXT NOT NULL,
+                        provider_name TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        arrival_window TEXT NOT NULL,
+                        rating REAL NOT NULL,
+                        scope TEXT NOT NULL,
+                        score REAL,
+                        recommendation TEXT,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY(job_id) REFERENCES jobs(id)
+                    );
 
-                CREATE TABLE IF NOT EXISTS invoices (
-                    id TEXT PRIMARY KEY,
-                    job_id TEXT NOT NULL,
-                    approved_amount REAL NOT NULL,
-                    invoice_amount REAL NOT NULL,
-                    variance REAL NOT NULL,
-                    variance_percentage REAL NOT NULL,
-                    decision TEXT NOT NULL,
-                    exception TEXT,
-                    recommended_action TEXT NOT NULL,
-                    rationale TEXT NOT NULL,
-                    line_items_json TEXT NOT NULL,
-                    ai_source TEXT NOT NULL DEFAULT 'fallback',
-                    ai_model_id TEXT,
-                    ai_request_id TEXT,
-                    ai_latency_ms INTEGER,
-                    ai_usage_json TEXT NOT NULL DEFAULT '{}',
-                    ai_error TEXT,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY(job_id) REFERENCES jobs(id)
-                );
+                    CREATE TABLE IF NOT EXISTS invoices (
+                        id TEXT PRIMARY KEY,
+                        job_id TEXT NOT NULL,
+                        approved_amount REAL NOT NULL,
+                        invoice_amount REAL NOT NULL,
+                        variance REAL NOT NULL,
+                        variance_percentage REAL NOT NULL,
+                        decision TEXT NOT NULL,
+                        exception TEXT,
+                        recommended_action TEXT NOT NULL,
+                        rationale TEXT NOT NULL,
+                        line_items_json TEXT NOT NULL,
+                        ai_source TEXT NOT NULL DEFAULT 'fallback',
+                        ai_model_id TEXT,
+                        ai_request_id TEXT,
+                        ai_latency_ms INTEGER,
+                        ai_usage_json TEXT NOT NULL DEFAULT '{}',
+                        ai_error TEXT,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY(job_id) REFERENCES jobs(id)
+                    );
 
-                CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    job_id TEXT,
-                    event_type TEXT NOT NULL,
-                    details_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-                """
-            )
+                    CREATE TABLE IF NOT EXISTS events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        job_id TEXT,
+                        event_type TEXT NOT NULL,
+                        details_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
+                    """
+                )
             self._ensure_invoice_ai_columns(con)
 
     def reset(self) -> None:
         with self.connect() as con:
-            con.executescript(
-                """
-                DELETE FROM events;
-                DELETE FROM invoices;
-                DELETE FROM quotes;
-                DELETE FROM jobs;
-                """
-            )
+            for statement in (
+                "DELETE FROM events",
+                "DELETE FROM invoices",
+                "DELETE FROM quotes",
+                "DELETE FROM jobs",
+            ):
+                con.execute(statement)
 
     def add_job(self, job: dict[str, Any]) -> None:
         with self.connect() as con:
             con.execute(
-                """
-                INSERT INTO jobs (
-                    id, category, issue, location, status, max_budget,
-                    selected_provider_id, selected_quote_id, approved_amount,
-                    appointment_window, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                self._sql(
+                    """
+                    INSERT INTO jobs (
+                        id, category, issue, location, status, max_budget,
+                        selected_provider_id, selected_quote_id, approved_amount,
+                        appointment_window, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+                ),
                 (
                     job["id"], job["category"], job["issue"], job["location"],
                     job["status"], job.get("max_budget"), job.get("selected_provider_id"),
@@ -146,7 +239,7 @@ class Store:
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.connect() as con:
-            row = con.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            row = con.execute(self._sql("SELECT * FROM jobs WHERE id = ?"), (job_id,)).fetchone()
         return dict(row) if row else None
 
     def update_job(self, job_id: str, **fields: Any) -> dict[str, Any]:
@@ -159,7 +252,7 @@ class Store:
         clauses = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [job_id]
         with self.connect() as con:
-            cur = con.execute(f"UPDATE jobs SET {clauses} WHERE id = ?", values)
+            cur = con.execute(self._sql(f"UPDATE jobs SET {clauses} WHERE id = ?"), values)
             if cur.rowcount != 1:
                 raise KeyError(job_id)
         job = self.get_job(job_id)
@@ -169,12 +262,14 @@ class Store:
     def add_quote(self, quote: dict[str, Any]) -> None:
         with self.connect() as con:
             con.execute(
-                """
-                INSERT INTO quotes (
-                    id, job_id, provider_id, provider_name, amount,
-                    arrival_window, rating, scope, score, recommendation, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                self._sql(
+                    """
+                    INSERT INTO quotes (
+                        id, job_id, provider_id, provider_name, amount,
+                        arrival_window, rating, scope, score, recommendation, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+                ),
                 (
                     quote["id"], quote["job_id"], quote["provider_id"],
                     quote["provider_name"], quote["amount"], quote["arrival_window"],
@@ -189,17 +284,18 @@ class Store:
         clauses = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [quote_id]
         with self.connect() as con:
-            con.execute(f"UPDATE quotes SET {clauses} WHERE id = ?", values)
+            con.execute(self._sql(f"UPDATE quotes SET {clauses} WHERE id = ?"), values)
 
     def get_quote(self, quote_id: str) -> dict[str, Any] | None:
         with self.connect() as con:
-            row = con.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+            row = con.execute(self._sql("SELECT * FROM quotes WHERE id = ?"), (quote_id,)).fetchone()
         return dict(row) if row else None
 
     def list_quotes(self, job_id: str) -> list[dict[str, Any]]:
         with self.connect() as con:
             rows = con.execute(
-                "SELECT * FROM quotes WHERE job_id = ? ORDER BY amount ASC", (job_id,)
+                self._sql("SELECT * FROM quotes WHERE job_id = ? ORDER BY amount ASC"),
+                (job_id,),
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -208,14 +304,16 @@ class Store:
         ai_usage = review.get("ai_usage") or {}
         with self.connect() as con:
             con.execute(
-                """
-                INSERT INTO invoices (
-                    id, job_id, approved_amount, invoice_amount, variance,
-                    variance_percentage, decision, exception, recommended_action,
-                    rationale, line_items_json, ai_source, ai_model_id,
-                    ai_request_id, ai_latency_ms, ai_usage_json, ai_error, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                self._sql(
+                    """
+                    INSERT INTO invoices (
+                        id, job_id, approved_amount, invoice_amount, variance,
+                        variance_percentage, decision, exception, recommended_action,
+                        rationale, line_items_json, ai_source, ai_model_id,
+                        ai_request_id, ai_latency_ms, ai_usage_json, ai_error, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+                ),
                 (
                     review["invoice_id"], review["job_id"], review["approved_amount"],
                     review["invoice_amount"], review["variance"],
@@ -231,7 +329,7 @@ class Store:
     def latest_invoice(self, job_id: str) -> dict[str, Any] | None:
         with self.connect() as con:
             row = con.execute(
-                "SELECT * FROM invoices WHERE job_id = ? ORDER BY created_at DESC LIMIT 1",
+                self._sql("SELECT * FROM invoices WHERE job_id = ? ORDER BY created_at DESC LIMIT 1"),
                 (job_id,),
             ).fetchone()
         if not row:
@@ -248,14 +346,17 @@ class Store:
     def log_event(self, event_type: str, details: dict[str, Any], job_id: str | None = None) -> None:
         with self.connect() as con:
             con.execute(
-                "INSERT INTO events (job_id, event_type, details_json, created_at) VALUES (?, ?, ?, ?)",
+                self._sql(
+                    "INSERT INTO events (job_id, event_type, details_json, created_at) VALUES (?, ?, ?, ?)"
+                ),
                 (job_id, event_type, json.dumps(details), utc_now()),
             )
 
     def list_events(self, job_id: str) -> list[dict[str, Any]]:
         with self.connect() as con:
             rows = con.execute(
-                "SELECT * FROM events WHERE job_id = ? ORDER BY id ASC", (job_id,)
+                self._sql("SELECT * FROM events WHERE job_id = ? ORDER BY id ASC"),
+                (job_id,),
             ).fetchall()
         out: list[dict[str, Any]] = []
         for row in rows:
